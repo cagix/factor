@@ -1,6 +1,6 @@
 ! Copyright (C) 2007, 2011, Slava Pestov, Elie CHAFTARI.
 ! See https://factorcode.org/license.txt for BSD license.
-USING: accessors destructors io.backend.unix io.files
+USING: accessors combinators destructors io.backend.unix io.files
 io.sockets.private io.sockets.secure io.sockets.secure.openssl
 io.timeouts kernel openssl openssl.libssl system ;
 FROM: io.ports => shutdown ;
@@ -29,8 +29,14 @@ M: secure (accept)
     ] with-destructors ;
 
 : (shutdown) ( ssl-handle -- )
-    dup dup handle>> SSL_shutdown check-ssl-error
-    [ dupd wait-for-fd (shutdown) ] [ drop ] if* ;
+    dup handle>> SSL_shutdown {
+        ! 0 means we need to read again (part one of two-way shutdown)
+        { 0 [ [ +input+ wait-for-fd ] [ (shutdown) ] bi ] }
+        ! 1 means the two-way shutdown is complete
+        { 1 [ drop ] }
+        ! error
+        { -1 [ -1 check-ssl-error "impossible" throw ] }
+    } case ;
 
 M: ssl-handle shutdown
     dup connected>> [
